@@ -461,4 +461,17 @@ static final class TransientArrayMap extends ATransientMap {
 			throw new IllegalAccessError("Transient used after persistent! call");
 	}
 }
+
+// not worth the optimization, since ArrayMaps tend to be small 
+// protected IPersistentCollection merge(ISeq mapEntries) {
+//     TransientArrayMap t = new TransientArrayMap(array);
+//     for(ISeq es = mapEntries; es != null; es = es.next())
+//         {
+//             Map.Entry e = (Map.Entry) es.first();
+//             t.doAssoc(e.getKey(), e.getValue());
+//         }
+//     PersistentArrayMap ret = (PersistentArrayMap) t.doPersistent();
+//     return ret.withMeta(meta());
+// }
+
 }

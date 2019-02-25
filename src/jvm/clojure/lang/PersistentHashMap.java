@@ -1359,4 +1359,18 @@ static final class NodeSeq extends ASeq {
 	}
 }
 
+protected IPersistentCollection merge(ISeq mapEntries) {
+    long count = RT.count(mapEntries);
+    if (count >= 64) {
+        TransientHashMap t = new TransientHashMap(this);
+        for(ISeq es = mapEntries; es != null; es = es.next())
+            {
+                Map.Entry e = (Map.Entry) es.first();
+                t.doAssoc(e.getKey(), e.getValue());
+            }
+        PersistentHashMap ret = (PersistentHashMap) t.doPersistent();
+        return ret.withMeta(meta());
+    } else return defaultMerge(mapEntries);
+}
+
 }

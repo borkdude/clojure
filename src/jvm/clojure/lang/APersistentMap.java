@@ -35,15 +35,22 @@ public IPersistentCollection cons(Object o){
 			throw new IllegalArgumentException("Vector arg to map conj must be a pair");
 		return assoc(v.nth(0), v.nth(1));
 		}
-
-	IPersistentMap ret = this;
-	for(ISeq es = RT.seq(o); es != null; es = es.next())
-		{
-		Map.Entry e = (Map.Entry) es.first();
-		ret = ret.assoc(e.getKey(), e.getValue());
-		}
-	return ret;
+        return merge(RT.seq(o));
 }
+
+protected IPersistentCollection defaultMerge(ISeq mapEntries) {
+    IPersistentMap ret = this;
+    for(ISeq es = mapEntries; es != null; es = es.next())
+        {
+            Map.Entry e = (Map.Entry) es.first();
+            ret = ret.assoc(e.getKey(), e.getValue());
+        }
+    return ret;
+};
+
+protected IPersistentCollection merge(ISeq mapEntries) {
+    return defaultMerge(mapEntries);
+};
 
 public boolean equals(Object obj){
 	return mapEquals(this, obj);
