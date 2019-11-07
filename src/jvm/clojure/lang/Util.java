@@ -244,6 +244,15 @@ static private <T extends Throwable> void sneakyThrow0(Throwable t) throws T {
 	throw (T) t;
 }
 
+/**
+ * Invoke f under lockee monitor
+ */
+static public Object lock(final Object lockee, final IFn f) {
+	synchronized(lockee) {
+		return f.invoke();
+	}
+}
+
 static public Object loadWithClass(String scriptbase, Class<?> loadFrom) throws IOException, ClassNotFoundException{
     RT.init();
     Var.pushThreadBindings(RT.map(new Object[] { Compiler.LOADER, loadFrom.getClassLoader() }));
