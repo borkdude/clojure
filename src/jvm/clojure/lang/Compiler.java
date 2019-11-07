@@ -2125,7 +2125,6 @@ static class MonitorEnterExpr extends UntypedExpr{
 	public void emit(C context, ObjExpr objx, GeneratorAdapter gen){
 		target.emit(C.EXPRESSION, objx, gen);
 		gen.monitorEnter();
-		NIL_EXPR.emit(context, objx, gen);
 	}
 
 	static class Parser implements IParser{
@@ -2149,7 +2148,6 @@ static class MonitorExitExpr extends UntypedExpr{
 	public void emit(C context, ObjExpr objx, GeneratorAdapter gen){
 		target.emit(C.EXPRESSION, objx, gen);
 		gen.monitorExit();
-		NIL_EXPR.emit(context, objx, gen);
 	}
 
 	static class Parser implements IParser{
@@ -2159,6 +2157,65 @@ static class MonitorExitExpr extends UntypedExpr{
 	}
 
 }
+
+
+	public static class ReentrantFinallyExpr implements Expr{
+		public final Expr tryExpr;
+		public final Expr finallyExpr;
+		public final int retLocal;
+		public final int finallyLocal;
+
+		public ReentrantFinallyExpr(Expr tryExpr, Expr finallyExpr, int retLocal, int finallyLocal){
+			this.tryExpr = tryExpr;
+			this.finallyExpr = finallyExpr;
+			this.retLocal = retLocal;
+			this.finallyLocal = finallyLocal;
+		}
+
+		public void emit(C context, ObjExpr objx, GeneratorAdapter gen) {
+			Label startTry = gen.newLabel();
+			Label endTry = gen.newLabel();
+			Label end = gen.newLabel();
+			Label finallyBegin = gen.newLabel();
+			Label finallyEnd = gen.newLabel();
+
+			gen.mark(startTry);
+			tryExpr.emit(context, objx, gen);
+			if(context != C.STATEMENT)
+				gen.visitVarInsn(OBJECT_TYPE.getOpcode(Opcodes.ISTORE), retLocal);
+			finallyExpr.emit(C.STATEMENT, objx, gen);
+			gen.mark(endTry);
+			gen.goTo(end);
+
+			gen.mark(finallyBegin);
+			//exception should be on stack
+			gen.visitVarInsn(OBJECT_TYPE.getOpcode(Opcodes.ISTORE), finallyLocal);
+			finallyExpr.emit(C.STATEMENT, objx, gen);
+			gen.mark(finallyEnd);
+
+			gen.visitVarInsn(OBJECT_TYPE.getOpcode(Opcodes.ILOAD), finallyLocal);
+			gen.throwException();
+
+			gen.mark(end);
+			if(context != C.STATEMENT)
+				gen.visitVarInsn(OBJECT_TYPE.getOpcode(Opcodes.ILOAD), retLocal);
+			gen.visitTryCatchBlock(startTry, endTry, finallyBegin, null);
+			gen.visitTryCatchBlock(finallyBegin, finallyEnd, finallyBegin, null);
+		}
+
+		public Object eval() {
+			throw new UnsupportedOperationException("Can't eval try");
+		}
+
+		public boolean hasJavaClass() {
+			return tryExpr.hasJavaClass();
+		}
+
+		public Class getJavaClass() {
+			return tryExpr.getJavaClass();
+		}
+
+	}
 
 public static class TryExpr implements Expr{
 	public final Expr tryExpr;
@@ -2281,7 +2338,8 @@ public static class TryExpr implements Expr{
 		public Expr parse(C context, Object frm) {
 			ISeq form = (ISeq) frm;
 //			if(context == C.EVAL || context == C.EXPRESSION)
-			if(context != C.RETURN)
+			boolean reentrantFinally = RT.booleanCast(RT.get(RT.meta(RT.first(frm)), Keyword.intern(null, "reentrant-finally")));;
+			if(context != C.RETURN && !reentrantFinally)
 				return analyze(context, RT.list(RT.list(FNONCE, PersistentVector.EMPTY, form)));
 
 			//(try try-expr* catch-expr* finally-expr?)
@@ -2293,6 +2351,7 @@ public static class TryExpr implements Expr{
             Expr bodyExpr = null;
 			Expr finallyExpr = null;
 			boolean caught = false;
+			boolean recursiveFinally = false;
 
 			int retLocal = getAndIncLocalNum();
 			int finallyLocal = getAndIncLocalNum();
@@ -2379,8 +2438,14 @@ public static class TryExpr implements Expr{
 				return bodyExpr;
 				}
 
-			return new TryExpr(bodyExpr, catches, finallyExpr, retLocal,
-			                   finallyLocal);
+			if (reentrantFinally) {
+				if (finallyExpr != null && RT.count(catches) == 0)
+				    return new ReentrantFinallyExpr(bodyExpr, finallyExpr, retLocal, finallyLocal);
+				throw Util.runtimeException("invalid try expr");
+			} else {
+				return new TryExpr(bodyExpr, catches, finallyExpr, retLocal,
+						finallyLocal);
+			}
 		}
 	}
 }

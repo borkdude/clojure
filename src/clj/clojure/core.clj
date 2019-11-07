@@ -1650,8 +1650,8 @@
   {:added "1.0"}
   [x & body]
   `(let [lockee# ~x]
-     (try
-      (monitor-enter lockee#)
+     (monitor-enter lockee#)
+     (^:reentrant-finally try
       ~@body
       (finally
        (monitor-exit lockee#)))))
