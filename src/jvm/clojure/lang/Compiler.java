@@ -1444,7 +1444,24 @@ static abstract class MethodExpr extends HostExpr{
 				else
 					{
 					e.emit(C.EXPRESSION, objx, gen);
-					HostExpr.emitUnboxArg(objx, gen, parameterTypes[i]);
+					// magic SAM cast here
+					if (LambdaMetafactory.isSAM(parameterTypes[i])) {
+
+						IPersistentVector nb = LambdaMetafactory.prepare(parameterTypes[i]);
+						String internalName = (String) nb.nth(0);
+						byte[] bytecode = (byte[]) nb.nth(1);
+						if (RT.booleanCast(COMPILE_FILES.deref()))
+							writeClassFile(internalName, bytecode);
+						if (RT.loadClassForName(internalName.replace("/", ".")) == null) {
+                                                    //System.err.println("defining: " + internalName.replace("/", "."));
+							DynamicClassLoader loader = (DynamicClassLoader) LOADER.deref();
+							loader.defineClass(internalName.replace("/", "."), bytecode, null);
+						}
+						gen.visitMethodInsn(INVOKESTATIC, internalName, "convert",
+								"(Ljava/lang/Object;)L"+parameterTypes[i].getName().replace(".", "/")+";"
+								, false);
+						} else
+							HostExpr.emitUnboxArg(objx, gen, parameterTypes[i]);
 					}
 				}
 			catch(Exception e1)
