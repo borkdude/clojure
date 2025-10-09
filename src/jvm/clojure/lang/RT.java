@@ -355,7 +355,10 @@ static{
 	v.setMeta(map(DOC_KEY, "Sequentially read and evaluate the set of forms contained in the file.",
 	              arglistskw, list(vector(namesym))));
 	try {
-		load("clojure/core");
+            System.out.println("loading clojure.core");
+            if ("executable" != System.getProperty("org.graalvm.nativeimage.kind")) {
+                load("clojure/core");
+            }
 	}
 	catch(Exception e) {
 		throw Util.sneakyThrow(e);
