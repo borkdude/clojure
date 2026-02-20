@@ -225,6 +225,13 @@ public Object set(Object val){
 			throw new IllegalStateException(String.format("Can't set!: %s from non-binding thread", sym));
 		return (b.val = val);
 		}
+	// During native-image build-time class init, there are no thread bindings.
+	// Fall back to setting the root for compiler hint vars like *warn-on-reflection*.
+	if("buildtime".equals(System.getProperty("org.graalvm.nativeimage.imagecode")))
+		{
+		bindRoot(val);
+		return val;
+		}
 	throw new IllegalStateException(String.format("Can't change/establish root binding of: %s with set", sym));
 }
 

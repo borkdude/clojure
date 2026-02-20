@@ -355,10 +355,11 @@ static{
 	v.setMeta(map(DOC_KEY, "Sequentially read and evaluate the set of forms contained in the file.",
 	              arglistskw, list(vector(namesym))));
 	try {
-            System.out.println("loading clojure.core");
-            if ("executable" != System.getProperty("org.graalvm.nativeimage.kind")) {
-                load("clojure/core");
-            }
+		// Skip loading core at native-image runtime — it was already loaded at build time.
+		// At build time (imagecode=buildtime) or on regular JVM (imagecode=null), load normally.
+		if (!"runtime".equals(System.getProperty("org.graalvm.nativeimage.imagecode"))) {
+			load("clojure/core");
+		}
 	}
 	catch(Exception e) {
 		throw Util.sneakyThrow(e);
@@ -492,6 +493,9 @@ static public void init() {
 
 private static boolean INIT = false; // init guard
 private synchronized static void doInit() {
+	// In native-image runtime, INIT may be true from build time — allow re-init
+	if("runtime".equals(System.getProperty("org.graalvm.nativeimage.imagecode")))
+		INIT = false;
 	if(INIT) {return;} else {INIT=true;}
 
 	Var.pushThreadBindings(

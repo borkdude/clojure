@@ -7709,12 +7709,10 @@ static String errorMsg(String source, int line, int column, String s){
 }
 
 public static Object eval(Object form) {
-    System.out.println("eval: " + form);
 	return eval(form, true);
 }
 
 public static Object eval(Object form, boolean freshLoader) {
-    System.out.println("eval2: " + form);
     boolean createdLoader = false;
 	if(true)//!LOADER.isBound())
 		{
