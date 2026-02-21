@@ -236,7 +236,7 @@ static final public Var METHOD_RETURN_CONTEXT = Var.create(null).setDynamic();
 static final public Var NO_RECUR = Var.create(null).setDynamic();
 
 //DynamicClassLoader
-static final public Var LOADER = RT.LOADER;
+static final public Var LOADER = Var.create().setDynamic();
 
 //String
 static final public Var SOURCE = Var.intern(Namespace.findOrCreate(Symbol.intern("clojure.core")),
@@ -8436,57 +8436,45 @@ public static Object compile(Reader rdr, String sourcePath, String sourceName) t
 			clinitgen.endMethod();
 			}
 
-		//__initLoad method: initializes constants and loads namespace code
-		//Called explicitly by RT.load() instead of from <clinit>, to avoid
-		//circular class initialization deadlocks in native-image parallel init
-		{
-		GeneratorAdapter initLoadGen = new GeneratorAdapter(ACC_PUBLIC + ACC_STATIC,
-		                                                    Method.getMethod("void __initLoad ()"),
-		                                                    null,
-		                                                    null,
-		                                                    cv);
-		initLoadGen.visitCode();
-		Label startTry = initLoadGen.newLabel();
-		Label endTry = initLoadGen.newLabel();
-		Label end = initLoadGen.newLabel();
-		Label finallyLabel = initLoadGen.newLabel();
-
-		for(int n = 0;n<numInits;n++)
-			initLoadGen.invokeStatic(objx.objtype, Method.getMethod("void __init" + n + "()"));
-
-		initLoadGen.push(objx.internalName.replace('/','.'));
-		initLoadGen.invokeStatic(RT_TYPE, Method.getMethod("Class classForName(String)"));
-		initLoadGen.invokeVirtual(CLASS_TYPE,Method.getMethod("ClassLoader getClassLoader()"));
-		initLoadGen.invokeStatic(RT_TYPE, Method.getMethod("void pushNSandLoader(ClassLoader)"));
-		initLoadGen.mark(startTry);
-		initLoadGen.invokeStatic(objx.objtype, Method.getMethod("void load()"));
-		initLoadGen.mark(endTry);
-		initLoadGen.invokeStatic(VAR_TYPE, Method.getMethod("void popThreadBindings()"));
-		initLoadGen.goTo(end);
-
-		initLoadGen.mark(finallyLabel);
-		//exception should be on stack
-		initLoadGen.invokeStatic(VAR_TYPE, Method.getMethod("void popThreadBindings()"));
-		initLoadGen.throwException();
-		initLoadGen.mark(end);
-		initLoadGen.visitTryCatchBlock(startTry, endTry, finallyLabel, null);
-
-		initLoadGen.returnValue();
-		initLoadGen.endMethod();
-		}
-
-		//empty <clinit> - no dependencies on other classes during class initialization
-		//prevents circular init deadlocks when native-image initializes classes in parallel
-		{
+		//static init for constants, keywords and vars
 		GeneratorAdapter clinitgen = new GeneratorAdapter(ACC_PUBLIC + ACC_STATIC,
 		                                                  Method.getMethod("void <clinit> ()"),
 		                                                  null,
 		                                                  null,
 		                                                  cv);
 		clinitgen.visitCode();
+		Label startTry = clinitgen.newLabel();
+		Label endTry = clinitgen.newLabel();
+		Label end = clinitgen.newLabel();
+		Label finallyLabel = clinitgen.newLabel();
+
+//		if(objx.constants.count() > 0)
+//			{
+//			objx.emitConstants(clinitgen);
+//			}
+		for(int n = 0;n<numInits;n++)
+			clinitgen.invokeStatic(objx.objtype, Method.getMethod("void __init" + n + "()"));
+
+		clinitgen.push(objx.internalName.replace('/','.'));
+		clinitgen.invokeStatic(RT_TYPE, Method.getMethod("Class classForName(String)"));
+		clinitgen.invokeVirtual(CLASS_TYPE,Method.getMethod("ClassLoader getClassLoader()"));
+		clinitgen.invokeStatic(Type.getType(Compiler.class), Method.getMethod("void pushNSandLoader(ClassLoader)"));
+		clinitgen.mark(startTry);
+		clinitgen.invokeStatic(objx.objtype, Method.getMethod("void load()"));
+		clinitgen.mark(endTry);
+		clinitgen.invokeStatic(VAR_TYPE, Method.getMethod("void popThreadBindings()"));
+		clinitgen.goTo(end);
+
+		clinitgen.mark(finallyLabel);
+		//exception should be on stack
+		clinitgen.invokeStatic(VAR_TYPE, Method.getMethod("void popThreadBindings()"));
+		clinitgen.throwException();
+		clinitgen.mark(end);
+		clinitgen.visitTryCatchBlock(startTry, endTry, finallyLabel, null);
+
+		//end of static init
 		clinitgen.returnValue();
 		clinitgen.endMethod();
-		}
 
 		//end of class
 		cv.visitEnd();

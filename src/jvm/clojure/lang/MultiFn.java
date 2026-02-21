@@ -26,11 +26,10 @@ volatile IPersistentMap preferTable;
 volatile IPersistentMap methodCache;
 volatile Object cachedHierarchy;
 
-// Use Var.intern directly instead of RT.var() to avoid circular class init with RT
-static final Var assoc = Var.intern(Namespace.findOrCreate(Symbol.intern(null, "clojure.core")), Symbol.intern(null, "assoc"));
-static final Var dissoc = Var.intern(Namespace.findOrCreate(Symbol.intern(null, "clojure.core")), Symbol.intern(null, "dissoc"));
-static final Var isa = Var.intern(Namespace.findOrCreate(Symbol.intern(null, "clojure.core")), Symbol.intern(null, "isa?"));
-static final Var parents = Var.intern(Namespace.findOrCreate(Symbol.intern(null, "clojure.core")), Symbol.intern(null, "parents"));
+static final Var assoc = RT.var("clojure.core", "assoc");
+static final Var dissoc = RT.var("clojure.core", "dissoc");
+static final Var isa = RT.var("clojure.core", "isa?");
+static final Var parents = RT.var("clojure.core", "parents");
 
 public MultiFn(String name, IFn dispatchFn, Object defaultDispatchVal, IRef hierarchy) {
 	this.rw = new ReentrantReadWriteLock();
