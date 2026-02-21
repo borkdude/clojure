@@ -520,9 +520,10 @@ static public void init() {
 private static boolean INIT = false; // init guard
 private synchronized static void doInit() {
 	boolean nativeImageRuntime = "runtime".equals(System.getProperty("org.graalvm.nativeimage.imagecode"));
-	// In native-image runtime, INIT may be true from build time — allow re-init
+	// Skip entirely at native-image runtime — user ns, refer, and server
+	// were all set up at build time and captured in the image.
 	if(nativeImageRuntime)
-		INIT = false;
+		return;
 	if(INIT) {return;} else {INIT=true;}
 
 	Var.pushThreadBindings(
