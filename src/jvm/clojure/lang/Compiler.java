@@ -2325,7 +2325,14 @@ static class StaticMethodExpr extends MethodExpr{
 				}
 			Type type = Type.getType(c);
 			Method m = new Method(methodName, Type.getReturnType(method), Type.getArgumentTypes(method));
-			gen.visitMethodInsn(INVOKESTATIC, type.getInternalName(), methodName, m.getDescriptor(), c.isInterface());
+			// Redirect Class.forName to RT.classForName for GraalVM Crema compatibility.
+			// GraalVM substitutes Class.forName internally and inlines it at call sites,
+			// so it's never compiled as a standalone method. Crema's interpreter can't
+			// dispatch to it. RT.classForName IS compiled and has matching signatures.
+			if(c == Class.class && methodName.equals("forName"))
+				gen.visitMethodInsn(INVOKESTATIC, "clojure/lang/RT", "classForName", m.getDescriptor(), false);
+			else
+				gen.visitMethodInsn(INVOKESTATIC, type.getInternalName(), methodName, m.getDescriptor(), c.isInterface());
 			//if(context != C.STATEMENT || method.getReturnType() == Void.TYPE)
 			Class retClass = method.getReturnType();
 			if(context == C.STATEMENT)
