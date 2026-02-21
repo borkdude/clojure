@@ -237,6 +237,8 @@ final static Var READER_RESOLVER = Var.intern(CLOJURE_NS, Symbol.intern("*reader
 
 final static Var IN_NS_VAR = Var.intern(CLOJURE_NS, Symbol.intern("in-ns"), F);
 final static Var NS_VAR = Var.intern(CLOJURE_NS, Symbol.intern("ns"), F);
+//DynamicClassLoader - moved here from Compiler to avoid Compiler<->RT circular class init
+static final public Var LOADER = Var.create().setDynamic();
 final static Var FN_LOADER_VAR = Var.intern(CLOJURE_NS, Symbol.intern("*fn-loader*"), null).setDynamic();
 static final Var PRINT_INITIALIZED = Var.intern(CLOJURE_NS, Symbol.intern("print-initialized"));
 static final Var PR_ON = Var.intern(CLOJURE_NS, Symbol.intern("pr-on"));
@@ -368,6 +370,17 @@ static{
 	CHECK_SPECS = RT.instrumentMacros;
 }
 
+// Duplicated from Compiler to avoid triggering Compiler.<clinit> during RT.<clinit>
+// Called from generated __initLoad() methods in __init classes
+public static void pushNSandLoader(ClassLoader loader){
+	Var.pushThreadBindings(RT.map(Var.intern(Symbol.intern("clojure.core"),
+	                                         Symbol.intern("*ns*")).setDynamic(),
+	                              null,
+	                              RT.FN_LOADER_VAR, loader,
+	                              RT.READEVAL, RT.T
+	                              ));
+}
+
 static public Keyword keyword(String ns, String name){
 	return Keyword.intern((Symbol.intern(ns, name)));
 }
@@ -470,7 +483,20 @@ static public void load(String scriptbase, boolean failIfNotFound) throws IOExce
 					RT.mapUniqueKeys(CURRENT_NS, CURRENT_NS.deref(),
 					       WARN_ON_REFLECTION, WARN_ON_REFLECTION.deref()
 							,RT.UNCHECKED_MATH, RT.UNCHECKED_MATH.deref()));
-			loaded = (loadClassForName(scriptbase.replace('/', '.') + LOADER_SUFFIX) != null);
+			Class initClass = loadClassForName(scriptbase.replace('/', '.') + LOADER_SUFFIX);
+			if(initClass != null) {
+				try {
+					// New-style __init class: <clinit> is empty, call __initLoad explicitly
+					initClass.getMethod("__initLoad").invoke(null);
+				} catch(NoSuchMethodException e) {
+					// Old-style __init class: <clinit> already loaded everything
+				} catch(java.lang.reflect.InvocationTargetException e) {
+					throw Util.sneakyThrow(e.getCause());
+				} catch(IllegalAccessException e) {
+					throw Util.sneakyThrow(e);
+				}
+				loaded = true;
+			}
 		}
 		finally {
 			Var.popThreadBindings();
@@ -2205,11 +2231,11 @@ static public ClassLoader makeClassLoader(){
 }
 
 static public ClassLoader baseLoader(){
-	if(Compiler.LOADER.isBound())
-		return (ClassLoader) Compiler.LOADER.deref();
+	if(LOADER.isBound())
+		return (ClassLoader) LOADER.deref();
 	else if(booleanCast(USE_CONTEXT_CLASSLOADER.deref()))
 		return Thread.currentThread().getContextClassLoader();
-	return Compiler.class.getClassLoader();
+	return RT.class.getClassLoader();
 }
 
 static public InputStream resourceAsStream(ClassLoader loader, String name){
