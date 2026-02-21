@@ -43,7 +43,7 @@ static public IPersistentMap create(Map other){
 }
 
 public PersistentTreeMap(){
-	this(RT.DEFAULT_COMPARATOR);
+	this(Util::compare);
 }
 
 public PersistentTreeMap withMeta(IPersistentMap meta){

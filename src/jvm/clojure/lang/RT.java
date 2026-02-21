@@ -493,8 +493,9 @@ static public void init() {
 
 private static boolean INIT = false; // init guard
 private synchronized static void doInit() {
+	boolean nativeImageRuntime = "runtime".equals(System.getProperty("org.graalvm.nativeimage.imagecode"));
 	// In native-image runtime, INIT may be true from build time — allow re-init
-	if("runtime".equals(System.getProperty("org.graalvm.nativeimage.imagecode")))
+	if(nativeImageRuntime)
 		INIT = false;
 	if(INIT) {return;} else {INIT=true;}
 
@@ -512,12 +513,15 @@ private synchronized static void doInit() {
 		refer.invoke(CLOJURE);
 		maybeLoadResourceScript("user.clj");
 
-		// start socket servers
-		Var require = var("clojure.core", "require");
-		Symbol SERVER = Symbol.intern("clojure.core.server");
-		require.invoke(SERVER);
-		Var start_servers = var("clojure.core.server", "start-servers");
-		start_servers.invoke(System.getProperties());
+		if(!nativeImageRuntime) {
+			// Skip in native-image runtime — already loaded at build time.
+			// This avoids re-loading clojure.core.server → clojure.spec.alpha etc.
+			Var require = var("clojure.core", "require");
+			Symbol SERVER = Symbol.intern("clojure.core.server");
+			require.invoke(SERVER);
+			Var start_servers = var("clojure.core.server", "start-servers");
+			start_servers.invoke(System.getProperties());
+		}
 	}
 	catch(Exception e) {
 		throw Util.sneakyThrow(e);
