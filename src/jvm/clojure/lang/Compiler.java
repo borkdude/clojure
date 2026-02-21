@@ -1658,6 +1658,7 @@ static class FISupport {
 	// 1) Target is a functional interface and not already implemented by AFn
 	// 2) Target method matches one of our fn invoker methods (0 <= arity <= 10)
 	static java.lang.reflect.Method maybeFIMethod(Class target) {
+		try {
 		if (target != null && target.isAnnotationPresent(FunctionalInterface.class)
 				&& !AFN_FIS.contains(target)) {
 
@@ -1668,6 +1669,9 @@ static class FISupport {
 						&& !OBJECT_METHODS.contains(method.getName()))
 					return method;
 			}
+		}
+		} catch (UnsupportedOperationException e) {
+			// Crema/GraalVM native image may not support getRawAnnotations
 		}
 		return null;
 	}
