@@ -1658,7 +1658,6 @@ static class FISupport {
 	// 1) Target is a functional interface and not already implemented by AFn
 	// 2) Target method matches one of our fn invoker methods (0 <= arity <= 10)
 	static java.lang.reflect.Method maybeFIMethod(Class target) {
-		try {
 		if (target != null && target.isAnnotationPresent(FunctionalInterface.class)
 				&& !AFN_FIS.contains(target)) {
 
@@ -1669,9 +1668,6 @@ static class FISupport {
 						&& !OBJECT_METHODS.contains(method.getName()))
 					return method;
 			}
-		}
-		} catch (UnsupportedOperationException e) {
-			// Crema/GraalVM native image may not support getRawAnnotations
 		}
 		return null;
 	}
@@ -2325,14 +2321,7 @@ static class StaticMethodExpr extends MethodExpr{
 				}
 			Type type = Type.getType(c);
 			Method m = new Method(methodName, Type.getReturnType(method), Type.getArgumentTypes(method));
-			// Redirect Class.forName to RT.classForName for GraalVM Crema compatibility.
-			// GraalVM substitutes Class.forName internally and inlines it at call sites,
-			// so it's never compiled as a standalone method. Crema's interpreter can't
-			// dispatch to it. RT.classForName IS compiled and has matching signatures.
-			if(c == Class.class && methodName.equals("forName"))
-				gen.visitMethodInsn(INVOKESTATIC, "clojure/lang/RT", "classForName", m.getDescriptor(), false);
-			else
-				gen.visitMethodInsn(INVOKESTATIC, type.getInternalName(), methodName, m.getDescriptor(), c.isInterface());
+			gen.visitMethodInsn(INVOKESTATIC, type.getInternalName(), methodName, m.getDescriptor(), c.isInterface());
 			//if(context != C.STATEMENT || method.getReturnType() == Void.TYPE)
 			Class retClass = method.getReturnType();
 			if(context == C.STATEMENT)
@@ -7724,7 +7713,7 @@ public static Object eval(Object form) {
 }
 
 public static Object eval(Object form, boolean freshLoader) {
-    boolean createdLoader = false;
+	boolean createdLoader = false;
 	if(true)//!LOADER.isBound())
 		{
 		Var.pushThreadBindings(RT.map(LOADER, RT.makeClassLoader()));
