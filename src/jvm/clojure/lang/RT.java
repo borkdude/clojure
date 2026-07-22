@@ -25,8 +25,6 @@ import java.lang.reflect.Array;
 import java.lang.IllegalArgumentException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.net.URL;
 import java.net.JarURLConnection;
 import java.nio.charset.Charset;
@@ -40,133 +38,111 @@ static final public String LOADER_SUFFIX = "__init";
 
 //simple-symbol->class
 final static public IPersistentMap DEFAULT_IMPORTS = map(
-//												  Symbol.intern("RT"), "clojure.lang.RT",
-//                                                  Symbol.intern("Num"), "clojure.lang.Num",
-//                                                  Symbol.intern("Symbol"), "clojure.lang.Symbol",
-//                                                  Symbol.intern("Keyword"), "clojure.lang.Keyword",
-//                                                  Symbol.intern("Var"), "clojure.lang.Var",
-//                                                  Symbol.intern("Ref"), "clojure.lang.Ref",
-//                                                  Symbol.intern("IFn"), "clojure.lang.IFn",
-//                                                  Symbol.intern("IObj"), "clojure.lang.IObj",
-//                                                  Symbol.intern("ISeq"), "clojure.lang.ISeq",
-//                                                  Symbol.intern("IPersistentCollection"),
-//                                                  "clojure.lang.IPersistentCollection",
-//                                                  Symbol.intern("IPersistentMap"), "clojure.lang.IPersistentMap",
-//                                                  Symbol.intern("IPersistentList"), "clojure.lang.IPersistentList",
-//                                                  Symbol.intern("IPersistentVector"), "clojure.lang.IPersistentVector",
+Symbol.intern("AbstractMethodError"), AbstractMethodError.class,
+Symbol.intern("Appendable"), Appendable.class,
+Symbol.intern("ArithmeticException"), ArithmeticException.class,
+Symbol.intern("ArrayIndexOutOfBoundsException"), ArrayIndexOutOfBoundsException.class,
+Symbol.intern("ArrayStoreException"), ArrayStoreException.class,
+Symbol.intern("AssertionError"), AssertionError.class,
+Symbol.intern("AutoCloseable"), AutoCloseable.class,
+Symbol.intern("BigDecimal"), BigDecimal.class,
+Symbol.intern("BigInteger"), BigInteger.class,
 Symbol.intern("Boolean"), Boolean.class,
+Symbol.intern("BootstrapMethodError"), BootstrapMethodError.class,
 Symbol.intern("Byte"), Byte.class,
+Symbol.intern("Callable"), Callable.class,
+Symbol.intern("CharSequence"), CharSequence.class,
 Symbol.intern("Character"), Character.class,
 Symbol.intern("Class"), Class.class,
+Symbol.intern("ClassCastException"), ClassCastException.class,
+Symbol.intern("ClassCircularityError"), ClassCircularityError.class,
+Symbol.intern("ClassFormatError"), ClassFormatError.class,
 Symbol.intern("ClassLoader"), ClassLoader.class,
+Symbol.intern("ClassNotFoundException"), ClassNotFoundException.class,
+Symbol.intern("ClassValue"), ClassValue.class,
+Symbol.intern("CloneNotSupportedException"), CloneNotSupportedException.class,
+Symbol.intern("Cloneable"), Cloneable.class,
+Symbol.intern("Comparable"), Comparable.class,
 Symbol.intern("Compiler"), Compiler.class,
+Symbol.intern("Deprecated"), Deprecated.class,
 Symbol.intern("Double"), Double.class,
 Symbol.intern("Enum"), Enum.class,
+Symbol.intern("EnumConstantNotPresentException"), EnumConstantNotPresentException.class,
+Symbol.intern("Error"), Error.class,
+Symbol.intern("Exception"), Exception.class,
+Symbol.intern("ExceptionInInitializerError"), ExceptionInInitializerError.class,
 Symbol.intern("Float"), Float.class,
+Symbol.intern("IllegalAccessError"), IllegalAccessError.class,
+Symbol.intern("IllegalAccessException"), IllegalAccessException.class,
+Symbol.intern("IllegalArgumentException"), IllegalArgumentException.class,
+Symbol.intern("IllegalCallerException"), IllegalCallerException.class,
+Symbol.intern("IllegalMonitorStateException"), IllegalMonitorStateException.class,
+Symbol.intern("IllegalStateException"), IllegalStateException.class,
+Symbol.intern("IllegalThreadStateException"), IllegalThreadStateException.class,
+Symbol.intern("IncompatibleClassChangeError"), IncompatibleClassChangeError.class,
+Symbol.intern("IndexOutOfBoundsException"), IndexOutOfBoundsException.class,
 Symbol.intern("InheritableThreadLocal"), InheritableThreadLocal.class,
+Symbol.intern("InstantiationError"), InstantiationError.class,
+Symbol.intern("InstantiationException"), InstantiationException.class,
 Symbol.intern("Integer"), Integer.class,
+Symbol.intern("InternalError"), InternalError.class,
+Symbol.intern("InterruptedException"), InterruptedException.class,
+Symbol.intern("Iterable"), Iterable.class,
+Symbol.intern("LayerInstantiationException"), LayerInstantiationException.class,
+Symbol.intern("LinkageError"), LinkageError.class,
 Symbol.intern("Long"), Long.class,
 Symbol.intern("Math"), Math.class,
+Symbol.intern("ModuleLayer"), ModuleLayer.class,
+Symbol.intern("NegativeArraySizeException"), NegativeArraySizeException.class,
+Symbol.intern("NoClassDefFoundError"), NoClassDefFoundError.class,
+Symbol.intern("NoSuchFieldError"), NoSuchFieldError.class,
+Symbol.intern("NoSuchFieldException"), NoSuchFieldException.class,
+Symbol.intern("NoSuchMethodError"), NoSuchMethodError.class,
+Symbol.intern("NoSuchMethodException"), NoSuchMethodException.class,
+Symbol.intern("NullPointerException"), NullPointerException.class,
 Symbol.intern("Number"), Number.class,
+Symbol.intern("NumberFormatException"), NumberFormatException.class,
 Symbol.intern("Object"), Object.class,
+Symbol.intern("OutOfMemoryError"), OutOfMemoryError.class,
+Symbol.intern("Override"), Override.class,
 Symbol.intern("Package"), Package.class,
 Symbol.intern("Process"), Process.class,
 Symbol.intern("ProcessBuilder"), ProcessBuilder.class,
+Symbol.intern("ProcessHandle"), ProcessHandle.class,
+Symbol.intern("Readable"), Readable.class,
+Symbol.intern("ReflectiveOperationException"), ReflectiveOperationException.class,
+Symbol.intern("Runnable"), Runnable.class,
 Symbol.intern("Runtime"), Runtime.class,
+Symbol.intern("RuntimeException"), RuntimeException.class,
 Symbol.intern("RuntimePermission"), RuntimePermission.class,
+Symbol.intern("SecurityException"), SecurityException.class,
 Symbol.intern("SecurityManager"), SecurityManager.class,
 Symbol.intern("Short"), Short.class,
+Symbol.intern("StackOverflowError"), StackOverflowError.class,
 Symbol.intern("StackTraceElement"), StackTraceElement.class,
+Symbol.intern("StackWalker"), StackWalker.class,
 Symbol.intern("StrictMath"), StrictMath.class,
 Symbol.intern("String"), String.class,
 Symbol.intern("StringBuffer"), StringBuffer.class,
 Symbol.intern("StringBuilder"), StringBuilder.class,
+Symbol.intern("StringIndexOutOfBoundsException"), StringIndexOutOfBoundsException.class,
+Symbol.intern("SuppressWarnings"), SuppressWarnings.class,
 Symbol.intern("System"), System.class,
 Symbol.intern("Thread"), Thread.class,
+Symbol.intern("Thread$State"), Thread.State.class,
+Symbol.intern("Thread$UncaughtExceptionHandler"), Thread.UncaughtExceptionHandler.class,
+Symbol.intern("ThreadDeath"), ThreadDeath.class,
 Symbol.intern("ThreadGroup"), ThreadGroup.class,
 Symbol.intern("ThreadLocal"), ThreadLocal.class,
 Symbol.intern("Throwable"), Throwable.class,
-Symbol.intern("Void"), Void.class,
-Symbol.intern("Appendable"), Appendable.class,
-Symbol.intern("CharSequence"), CharSequence.class,
-Symbol.intern("Cloneable"), Cloneable.class,
-Symbol.intern("Comparable"), Comparable.class,
-Symbol.intern("Iterable"), Iterable.class,
-Symbol.intern("Readable"), Readable.class,
-Symbol.intern("Runnable"), Runnable.class,
-Symbol.intern("Callable"), Callable.class,
-Symbol.intern("BigInteger"), BigInteger.class,
-Symbol.intern("BigDecimal"), BigDecimal.class,
-Symbol.intern("ArithmeticException"), ArithmeticException.class,
-Symbol.intern("ArrayIndexOutOfBoundsException"), ArrayIndexOutOfBoundsException.class,
-Symbol.intern("ArrayStoreException"), ArrayStoreException.class,
-Symbol.intern("ClassCastException"), ClassCastException.class,
-Symbol.intern("ClassNotFoundException"), ClassNotFoundException.class,
-Symbol.intern("CloneNotSupportedException"), CloneNotSupportedException.class,
-Symbol.intern("EnumConstantNotPresentException"), EnumConstantNotPresentException.class,
-Symbol.intern("Exception"), Exception.class,
-Symbol.intern("IllegalAccessException"), IllegalAccessException.class,
-Symbol.intern("IllegalArgumentException"), IllegalArgumentException.class,
-Symbol.intern("IllegalMonitorStateException"), IllegalMonitorStateException.class,
-Symbol.intern("IllegalStateException"), IllegalStateException.class,
-Symbol.intern("IllegalThreadStateException"), IllegalThreadStateException.class,
-Symbol.intern("IndexOutOfBoundsException"), IndexOutOfBoundsException.class,
-Symbol.intern("InstantiationException"), InstantiationException.class,
-Symbol.intern("InterruptedException"), InterruptedException.class,
-Symbol.intern("NegativeArraySizeException"), NegativeArraySizeException.class,
-Symbol.intern("NoSuchFieldException"), NoSuchFieldException.class,
-Symbol.intern("NoSuchMethodException"), NoSuchMethodException.class,
-Symbol.intern("NullPointerException"), NullPointerException.class,
-Symbol.intern("NumberFormatException"), NumberFormatException.class,
-Symbol.intern("RuntimeException"), RuntimeException.class,
-Symbol.intern("SecurityException"), SecurityException.class,
-Symbol.intern("StringIndexOutOfBoundsException"), StringIndexOutOfBoundsException.class,
 Symbol.intern("TypeNotPresentException"), TypeNotPresentException.class,
-Symbol.intern("UnsupportedOperationException"), UnsupportedOperationException.class,
-Symbol.intern("AbstractMethodError"), AbstractMethodError.class,
-Symbol.intern("AssertionError"), AssertionError.class,
-Symbol.intern("ClassCircularityError"), ClassCircularityError.class,
-Symbol.intern("ClassFormatError"), ClassFormatError.class,
-Symbol.intern("Error"), Error.class,
-Symbol.intern("ExceptionInInitializerError"), ExceptionInInitializerError.class,
-Symbol.intern("IllegalAccessError"), IllegalAccessError.class,
-Symbol.intern("IncompatibleClassChangeError"), IncompatibleClassChangeError.class,
-Symbol.intern("InstantiationError"), InstantiationError.class,
-Symbol.intern("InternalError"), InternalError.class,
-Symbol.intern("LinkageError"), LinkageError.class,
-Symbol.intern("NoClassDefFoundError"), NoClassDefFoundError.class,
-Symbol.intern("NoSuchFieldError"), NoSuchFieldError.class,
-Symbol.intern("NoSuchMethodError"), NoSuchMethodError.class,
-Symbol.intern("OutOfMemoryError"), OutOfMemoryError.class,
-Symbol.intern("StackOverflowError"), StackOverflowError.class,
-Symbol.intern("ThreadDeath"), ThreadDeath.class,
 Symbol.intern("UnknownError"), UnknownError.class,
 Symbol.intern("UnsatisfiedLinkError"), UnsatisfiedLinkError.class,
 Symbol.intern("UnsupportedClassVersionError"), UnsupportedClassVersionError.class,
+Symbol.intern("UnsupportedOperationException"), UnsupportedOperationException.class,
 Symbol.intern("VerifyError"), VerifyError.class,
 Symbol.intern("VirtualMachineError"), VirtualMachineError.class,
-Symbol.intern("Thread$UncaughtExceptionHandler"), Thread.UncaughtExceptionHandler.class,
-Symbol.intern("Thread$State"), Thread.State.class,
-Symbol.intern("Deprecated"), Deprecated.class,
-Symbol.intern("Override"), Override.class,
-Symbol.intern("SuppressWarnings"), SuppressWarnings.class
-
-//                                                  Symbol.intern("Collection"), "java.util.Collection",
-//                                                  Symbol.intern("Comparator"), "java.util.Comparator",
-//                                                  Symbol.intern("Enumeration"), "java.util.Enumeration",
-//                                                  Symbol.intern("EventListener"), "java.util.EventListener",
-//                                                  Symbol.intern("Formattable"), "java.util.Formattable",
-//                                                  Symbol.intern("Iterator"), "java.util.Iterator",
-//                                                  Symbol.intern("List"), "java.util.List",
-//                                                  Symbol.intern("ListIterator"), "java.util.ListIterator",
-//                                                  Symbol.intern("Map"), "java.util.Map",
-//                                                  Symbol.intern("Map$Entry"), "java.util.Map$Entry",
-//                                                  Symbol.intern("Observer"), "java.util.Observer",
-//                                                  Symbol.intern("Queue"), "java.util.Queue",
-//                                                  Symbol.intern("RandomAccess"), "java.util.RandomAccess",
-//                                                  Symbol.intern("Set"), "java.util.Set",
-//                                                  Symbol.intern("SortedMap"), "java.util.SortedMap",
-//                                                  Symbol.intern("SortedSet"), "java.util.SortedSet"
+Symbol.intern("Void"), Void.class
 );
 
 // single instance of UTF-8 Charset, so as to avoid catching UnsupportedCharsetExceptions everywhere
@@ -787,6 +763,24 @@ static public Object pop(Object x){
 	return ((IPersistentStack) x).pop();
 }
 
+private static final Object REQ_NOT_FOUND = new Object();
+
+static public String reqmsg(Object key){
+    String msg = "Missing required key: ";
+    if(key instanceof String)
+        return msg + "\"" + key + "\"";
+    else
+        return msg + key;
+}
+
+static public Object req(Object coll, Object key){
+    Object v = get(coll, key, REQ_NOT_FOUND);
+    if(v == REQ_NOT_FOUND)
+        throw new IllegalArgumentException(reqmsg(key));
+    else
+        return v;
+}
+
 static public Object get(Object coll, Object key){
 	if(coll instanceof ILookup)
 		return ((ILookup) coll).valAt(key);
@@ -800,19 +794,11 @@ static Object getFrom(Object coll, Object key){
 		Map m = (Map) coll;
 		return m.get(key);
 	}
-	else if(coll instanceof IPersistentSet) {
-		IPersistentSet set = (IPersistentSet) coll;
-		return set.get(key);
-	}
 	else if(key instanceof Number && (coll instanceof String || coll.getClass().isArray())) {
 		int n = ((Number) key).intValue();
 		if(n >= 0 && n < count(coll))
 			return nth(coll, n);
 		return null;
-	}
-	else if(coll instanceof ITransientSet) {
-		ITransientSet set = (ITransientSet) coll;
-		return set.get(key);
 	}
 
 	return null;
@@ -833,21 +819,9 @@ static Object getFrom(Object coll, Object key, Object notFound){
 			return m.get(key);
 		return notFound;
 	}
-	else if(coll instanceof IPersistentSet) {
-		IPersistentSet set = (IPersistentSet) coll;
-		if(set.contains(key))
-			return set.get(key);
-		return notFound;
-	}
 	else if(key instanceof Number && (coll instanceof String || coll.getClass().isArray())) {
 		int n = ((Number) key).intValue();
 		return n >= 0 && n < count(coll) ? nth(coll, n) : notFound;
-	}
-	else if(coll instanceof ITransientSet) {
-		ITransientSet set = (ITransientSet) coll;
-		if(set.contains(key))
-			return set.get(key);
-		return notFound;
 	}
 	return notFound;
 
@@ -1620,7 +1594,7 @@ static public double uncheckedDoubleCast(double x){
 static public IPersistentMap map(Object... init){
 	if(init == null || init.length == 0)
 		return PersistentArrayMap.EMPTY;
-	else if(init.length <= PersistentArrayMap.HASHTABLE_THRESHOLD)
+	else if(PersistentArrayMap.canBePAM(init))
 		return PersistentArrayMap.createWithCheck(init);
 	return PersistentHashMap.createWithCheck(init);
 }
@@ -1628,7 +1602,7 @@ static public IPersistentMap map(Object... init){
 static public IPersistentMap mapUniqueKeys(Object... init){
 	if(init == null)
 		return PersistentArrayMap.EMPTY;
-	else if(init.length <= PersistentArrayMap.HASHTABLE_THRESHOLD)
+	else if(PersistentArrayMap.canBePAM(init))
 		return new PersistentArrayMap(init);
 	return PersistentHashMap.create(init);
 }
@@ -2190,19 +2164,13 @@ static public Object[] setValues(Object... vals){
 }
 
 
-static public ClassLoader makeClassLoader(){
-	return (ClassLoader) AccessController.doPrivileged(new PrivilegedAction(){
-		public Object run(){
-            try{
-            Var.pushThreadBindings(RT.map(USE_CONTEXT_CLASSLOADER, RT.T));
-//			getRootClassLoader();
-			return new DynamicClassLoader(baseLoader());
-            }
-                finally{
-            Var.popThreadBindings();
-            }
-		}
-	});
+static public ClassLoader makeClassLoader() {
+	try {
+		Var.pushThreadBindings(RT.map(USE_CONTEXT_CLASSLOADER, RT.T));
+		return new DynamicClassLoader(baseLoader());
+	} finally {
+		Var.popThreadBindings();
+	}
 }
 
 static public ClassLoader baseLoader(){

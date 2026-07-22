@@ -348,6 +348,8 @@ static final public Var CLEAR_SITES = Var.create(null).setDynamic();
 	EVAL
 }
 
+public static final int JVM_BYTECODE_VERSION = V17;
+
 private class Recur {};
 static final public Class RECUR_CLASS = Recur.class;
     
@@ -4881,7 +4883,7 @@ static public class ObjExpr implements Expr{
 		ClassVisitor cv = cw;
 //		ClassVisitor cv = new TraceClassVisitor(new CheckClassAdapter(cw), new PrintWriter(System.out));
 		//ClassVisitor cv = new TraceClassVisitor(cw, new PrintWriter(System.out));
-		cv.visit(V1_8, ACC_PUBLIC + ACC_SUPER + ACC_FINAL, internalName, null,superName,interfaceNames);
+		cv.visit(JVM_BYTECODE_VERSION, ACC_PUBLIC + ACC_SUPER + ACC_FINAL, internalName, null,superName,interfaceNames);
 //		         superName != null ? superName :
 //		         (isVariadic() ? "clojure/lang/RestFn" : "clojure/lang/AFunction"), null);
 		String source = (String) SOURCE.deref();
@@ -6962,6 +6964,8 @@ public static class LetExpr implements Expr, MaybePrimitiveExpr{
 						Symbol sym = (Symbol) bindings.nth(i);
 						if(sym.getNamespace() != null)
 							throw Util.runtimeException("Can't let qualified name: " + sym);
+						if(sym.equals(_AMP_))
+							throw Util.runtimeException("Can't use & as a local binding");
 						Expr init = analyze(C.EXPRESSION, bindings.nth(i + 1), sym.name);
 						if(isLoop)
 							{
@@ -7451,8 +7455,10 @@ static public class CompilerException extends RuntimeException implements IExcep
 	private static String verb(Keyword phase) {
 		if(PHASE_READ.equals(phase)){
 			return "reading source";
-		} else if(PHASE_COMPILE_SYNTAX_CHECK.equals(phase) || PHASE_COMPILATION.equals(phase)){
+		} else if(PHASE_COMPILE_SYNTAX_CHECK.equals(phase) || PHASE_COMPILATION.equals(phase)) {
 			return "compiling";
+		} else if(PHASE_EXECUTION.equals(phase)) {
+			return "executing";
 		} else {
 			return "macroexpanding";
 		}
@@ -8369,7 +8375,7 @@ public static Object compile(Reader rdr, String sourcePath, String sourceName) t
 		objx.objtype = Type.getObjectType(objx.internalName);
 		ClassWriter cw = classWriter();
 		ClassVisitor cv = cw;
-		cv.visit(V1_8, ACC_PUBLIC + ACC_SUPER, objx.internalName, null, "java/lang/Object", null);
+		cv.visit(JVM_BYTECODE_VERSION, ACC_PUBLIC + ACC_SUPER, objx.internalName, null, "java/lang/Object", null);
 
 		//static load method
 		GeneratorAdapter gen = new GeneratorAdapter(ACC_PUBLIC + ACC_STATIC,
@@ -8397,7 +8403,7 @@ public static Object compile(Reader rdr, String sourcePath, String sourceName) t
 		for(int i = 0; i < objx.constants.count(); i++)
 			{
             if(objx.usedConstants.contains(i))
-			    cv.visitField(ACC_PUBLIC + ACC_FINAL + ACC_STATIC, objx.constantName(i), objx.constantType(i).getDescriptor(),
+			    cv.visitField(ACC_PUBLIC + ACC_STATIC, objx.constantName(i), objx.constantType(i).getDescriptor(),
 			              null, null);
 			}
 
@@ -8548,9 +8554,11 @@ static public class NewInstanceExpr extends ObjExpr{
 
 
 		ObjExpr ret = build(interfaces, null, null, classname, Symbol.intern(classname), null, rform, frm, null);
-		if(frm instanceof IObj && ((IObj) frm).meta() != null)
-			return new MetaExpr(ret, MapExpr
-					.parse(context == C.EVAL ? context : C.EXPRESSION, ((IObj) frm).meta()));
+		IPersistentMap fmeta = RT.meta(frm);
+		if(fmeta != null)
+			fmeta = fmeta.without(RT.LINE_KEY).without(RT.COLUMN_KEY).without(RT.FILE_KEY);
+		if (RT.count(fmeta) > 0)
+			return new MetaExpr(ret, MapExpr.parse(context == C.EVAL ? context : C.EXPRESSION, fmeta));
 		else
 			return ret;
 	}
@@ -8689,7 +8697,7 @@ static public class NewInstanceExpr extends ObjExpr{
 	static Class compileStub(String superName, NewInstanceExpr ret, String[] interfaceNames, Object frm){
 	    ClassWriter cw = classWriter();
 	    ClassVisitor cv = cw;
-		cv.visit(V1_8, ACC_PUBLIC + ACC_SUPER, COMPILE_STUB_PREFIX + "/" + ret.internalName,
+		cv.visit(JVM_BYTECODE_VERSION, ACC_PUBLIC + ACC_SUPER, COMPILE_STUB_PREFIX + "/" + ret.internalName,
 		         null,superName,interfaceNames);
 
 		//instance fields for closed-overs

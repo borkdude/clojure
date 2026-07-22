@@ -33,6 +33,7 @@ private static final long serialVersionUID = -2074065891090893601L;
 
 final Object[] array;
 static final int HASHTABLE_THRESHOLD = 16;
+static final int KW_HASHTABLE_THRESHOLD = 128;
 
 public static final PersistentArrayMap EMPTY = new PersistentArrayMap();
 private final IPersistentMap _meta;
@@ -64,6 +65,19 @@ PersistentArrayMap create(Object... init){
 
 IPersistentMap createHT(Object[] init){
 	return PersistentHashMap.create(meta(), init);
+}
+
+static public boolean canBePAM(Object[] init){
+	if(init.length <= HASHTABLE_THRESHOLD)
+		return true;
+	else if(init.length <= KW_HASHTABLE_THRESHOLD) {
+		for(int i = HASHTABLE_THRESHOLD;i < init.length; i+=2){
+			if(!(init[i] instanceof Keyword))
+				return false;
+			}
+		return true;
+		}
+	return false;
 }
 
 static public PersistentArrayMap createWithCheck(Object[] init){
@@ -233,7 +247,9 @@ public IPersistentMap assocEx(Object key, Object val) {
 		}
 	else //didn't have key, grow
 		{
-		if(array.length >= HASHTABLE_THRESHOLD)
+		boolean isKW = key instanceof Keyword;
+		if((isKW && array.length >= KW_HASHTABLE_THRESHOLD)
+		   || (!isKW && array.length >= HASHTABLE_THRESHOLD))
 			return createHT(array).assocEx(key, val);
 		newArray = new Object[array.length + 2];
 		if(array.length > 0)
@@ -256,7 +272,9 @@ public IPersistentMap assoc(Object key, Object val){
 		}
 	else //didn't have key, grow
 		{
-		if(array.length >= HASHTABLE_THRESHOLD)
+		boolean isKW = key instanceof Keyword;
+		if((isKW && array.length >= KW_HASHTABLE_THRESHOLD)
+			|| (!isKW && array.length >= HASHTABLE_THRESHOLD))
 			return createHT(array).assoc(key, val);
 		newArray = new Object[array.length + 2];
 		if(array.length > 0)
