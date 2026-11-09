@@ -1188,7 +1188,7 @@ static class QualifiedMethodExpr implements Expr {
 	public QualifiedMethodExpr(Class methodClass, Symbol sym, StaticFieldExpr fieldOL) {
 		c = methodClass;
 		methodSymbol = sym;
-		tagClass = tagOf(sym) != null ? HostExpr.tagToClass(tagOf(sym)) : AFn.class;
+		tagClass = tagOf(sym) != null ? HostExpr.tagToClass(tagOf(sym)) : null;
 		hintedSig = tagsToClasses(paramTagsOf(sym));
 		if(sym.name.startsWith(".")) {
 			kind = MethodKind.INSTANCE;
@@ -1227,7 +1227,7 @@ static class QualifiedMethodExpr implements Expr {
 			buildThunk(context, this).emit(context, objx, gen);
 	}
 
-	// Expr impl - method value, always an AFn
+	// Expr impl - method value is an AFn, field overload has field type
 
 	@Override
 	public boolean hasJavaClass() {
@@ -1236,7 +1236,12 @@ static class QualifiedMethodExpr implements Expr {
 
 	@Override
 	public Class getJavaClass() {
-		return tagClass;
+      if (tagClass != null)
+        return tagClass;
+      else if (preferOverloadedField())
+        return fieldOverload.getJavaClass();
+      else
+        return AFn.class;
 	}
 
 	// TBD: caching/reuse of thunks
@@ -3834,7 +3839,50 @@ static class KeywordInvokeExpr implements Expr{
 			}
 	}
 
-    public void emit(C context, ObjExpr objx, GeneratorAdapter gen){
+	//*
+	public void emit(C context, ObjExpr objx, GeneratorAdapter gen){
+		Label endLabel = gen.newLabel();
+		Label getLabel = gen.newLabel();
+		Label faultLabel = gen.newLabel();
+
+		gen.visitLineNumber(line, gen.mark());
+		target.emit(C.EXPRESSION, objx, gen); //target
+		gen.dup(); //target, target
+		gen.instanceOf(ObjExpr.IKEYWORD_LOOKUP_TYPE); //target, cmp
+		gen.ifZCmp(GeneratorAdapter.EQ, getLabel); //target
+
+		gen.getStatic(objx.objtype, objx.siteNameStatic(siteIndex),ObjExpr.KEYWORD_LOOKUPSITE_TYPE);  //target,site
+		gen.dupX1(); //site,target,site
+		gen.invokeVirtual(ObjExpr.KEYWORD_LOOKUPSITE_TYPE,ObjExpr.thunkMethod); //site, target, thunk
+		gen.dup2();  //site, target, thunk, target, thunk
+		gen.swap(); //site, target, thunk, thunk, target
+		gen.invokeInterface(ObjExpr.ILOOKUP_THUNK_TYPE, Method.getMethod("Object get(Object)")); //site,target,thunk,result
+		gen.dupX2();                          //site,result,target,thunk,result
+		gen.visitJumpInsn(IF_ACMPEQ, faultLabel); //site,result,target
+		gen.pop(); //site,result
+		gen.swap(); //result, site
+		gen.pop();  //result
+		gen.goTo(endLabel);
+
+		gen.mark(faultLabel);    //site, result, target
+		gen.swap();              //site, target, result
+		gen.pop(); //site,target
+		gen.invokeVirtual(ObjExpr.KEYWORD_LOOKUPSITE_TYPE,ObjExpr.faultMethod); //result
+		gen.goTo(endLabel);
+
+		gen.mark(getLabel);    //target
+		kw.emit(C.EXPRESSION, objx, gen); //target, kw
+		gen.visitLineNumber(line, gen.mark());
+		gen.invokeStatic(RT_TYPE, Method.getMethod("Object get(Object,Object)")); //result
+
+		gen.mark(endLabel);
+		if(context == C.STATEMENT)
+			gen.pop();
+	}
+	//*/
+
+	/*
+	public void emit(C context, ObjExpr objx, GeneratorAdapter gen){
         Label endLabel = gen.newLabel();
         Label faultLabel = gen.newLabel();
 
@@ -3867,6 +3915,7 @@ static class KeywordInvokeExpr implements Expr{
         if(context == C.STATEMENT)
             gen.pop();
     }
+	//*/
 
 	public boolean hasJavaClass() {
 		return tag != null;
@@ -4841,7 +4890,10 @@ static public class ObjExpr implements Expr{
 
 	final static Type ILOOKUP_SITE_TYPE = Type.getType(ILookupSite.class);
 	final static Type ILOOKUP_THUNK_TYPE = Type.getType(ILookupThunk.class);
-	final static Type KEYWORD_LOOKUPSITE_TYPE = Type.getType(KeywordLookupSite.class);
+	final static Type IKEYWORD_LOOKUP_TYPE = Type.getType(IKeywordLookup.class);
+	final static Type KEYWORD_LOOKUPSITE_TYPE = Type.getType(KeywordLookupSite2.class);
+	final static Method thunkMethod = Method.getMethod("clojure.lang.ILookupThunk thunk()");
+	final static Method faultMethod = Method.getMethod("Object fault(clojure.lang.IKeywordLookup)");
 
 	private DynamicClassLoader loader;
 	private byte[] bytecode;
@@ -5170,8 +5222,6 @@ static public class ObjExpr implements Expr{
             cv.visitField(ACC_FINAL
                           + ACC_STATIC, siteNameStatic(i), KEYWORD_LOOKUPSITE_TYPE.getDescriptor(),
                           null, null);
-            cv.visitField(ACC_STATIC, thunkNameStatic(i), ILOOKUP_THUNK_TYPE.getDescriptor(),
-                          null, null);
             }
 
         //static init for constants, keywords and vars
@@ -5259,7 +5309,6 @@ static public class ObjExpr implements Expr{
 			                            Method.getMethod("void <init>(clojure.lang.Keyword)"));
 			clinitgen.dup();
 			clinitgen.putStatic(objtype, siteNameStatic(i), KEYWORD_LOOKUPSITE_TYPE);
-			clinitgen.putStatic(objtype, thunkNameStatic(i), ILOOKUP_THUNK_TYPE);
 			}
 	}
 
@@ -5340,7 +5389,7 @@ static public class ObjExpr implements Expr{
 			else
 				{
 				gen.push(destubClassName(cc.getName()));
-				gen.invokeStatic(RT_TYPE, Method.getMethod("Class classForName(String)"));
+				gen.invokeStatic(RT_TYPE, Method.getMethod("Class classForNameNonLoading(String)"));
 				}
 			}
 		else if(value instanceof Symbol)
@@ -7585,7 +7634,11 @@ public static Object macroexpand1(Object x) {
 				try
 					{
                     ISeq args = RT.cons(form, RT.cons(Compiler.LOCAL_ENV.get(), form.next()));
-					return v.applyTo(args);
+					Object exp = v.applyTo(args);
+					Symbol tag = tagOf(form);
+					if(RT.booleanCast(tag) && !tag.equals(tagOf(exp)))
+						exp = ((IObj)RT.list(IDENTITY, exp)).withMeta(RT.meta(form));
+					return exp;
 					}
 				catch(ArityException e)
 					{
@@ -7684,8 +7737,11 @@ private static Expr analyzeSeq(C context, ISeq form, String name) {
 		if(op == null)
 			throw new IllegalArgumentException("Can't call nil, form: " + form);
 		IFn inline = isInline(op, RT.count(RT.next(form)));
-		if(inline != null)
-			return analyze(context, preserveTag(form, inline.applyTo(RT.next(form))));
+		if(inline != null){
+			Object iform = inline.applyTo(RT.next(form));
+			if(iform != null)
+				return analyze(context, preserveTag(form, iform));
+			}
 		IParser p;
 		if(op.equals(FN))
 			return FnExpr.parse(context, form, name);

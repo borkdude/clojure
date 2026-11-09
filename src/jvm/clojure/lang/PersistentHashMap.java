@@ -299,21 +299,24 @@ static final class TransientHashMap extends ATransientMap {
 	volatile boolean hasNull;
 	volatile Object nullValue;
 	final Box leafFlag = new Box(null);
-
+	private final IPersistentMap _meta;
 
 	TransientHashMap(PersistentHashMap m) {
-		this(new AtomicReference<Thread>(Thread.currentThread()), m.root, m.count, m.hasNull, m.nullValue);
+		this(new AtomicReference<Thread>(Thread.currentThread()), m.root, m.count, m.hasNull, m.nullValue, m._meta);
 	}
 	
-	TransientHashMap(AtomicReference<Thread> edit, INode root, int count, boolean hasNull, Object nullValue) {
+	TransientHashMap(AtomicReference<Thread> edit, INode root, int count, boolean hasNull, Object nullValue,
+	                 IPersistentMap _meta) {
 		this.edit = edit;
 		this.root = root; 
 		this.count = count; 
 		this.hasNull = hasNull;
 		this.nullValue = nullValue;
+		this._meta = _meta;
 	}
 
-	ITransientMap doAssoc(Object key, Object val) {
+	public ITransientMap assoc(Object key, Object val) {
+		ensureEditable();
 		if (key == null) {
 			if (this.nullValue != val)
 				this.nullValue = val;
@@ -332,8 +335,12 @@ static final class TransientHashMap extends ATransientMap {
 		if(leafFlag.val != null) this.count++;
 		return this;
 	}
+	ITransientMap doAssoc(Object key, Object val) {
+		return assoc(key, val);
+	}
 
-	ITransientMap doWithout(Object key) {
+	public ITransientMap without(Object key) {
+		ensureEditable();
 		if (key == null) {
 			if (!hasNull) return this;
 			hasNull = false;
@@ -350,13 +357,21 @@ static final class TransientHashMap extends ATransientMap {
 		if(leafFlag.val != null) this.count--;
 		return this;
 	}
-
-	IPersistentMap doPersistent() {
-		edit.set(null);
-		return new PersistentHashMap(count, root, hasNull, nullValue);
+	ITransientMap doWithout(Object key) {
+		return without(key);
 	}
 
-	Object doValAt(Object key, Object notFound) {
+	public IPersistentMap persistent() {
+		ensureEditable();
+		edit.set(null);
+		return new PersistentHashMap(_meta, count, root, hasNull, nullValue);
+	}
+	IPersistentMap doPersistent() {
+		return persistent();
+	}
+
+	public Object valAt(Object key, Object notFound) {
+		ensureEditable();
 		if (key == null)
 			if (hasNull)
 				return nullValue;
@@ -366,9 +381,30 @@ static final class TransientHashMap extends ATransientMap {
 			return notFound;
 		return root.find(0, hash(key), key, notFound);
 	}
+	Object doValAt(Object key, Object notFound) {
+		return valAt(key, notFound);
+	}
 
-	int doCount() {
+	private static final Object NOT_FOUND = new Object();
+	public boolean containsKey(Object key){
+		ensureEditable();
+		return valAt(key, NOT_FOUND) != NOT_FOUND;
+	}
+
+	public IMapEntry entryAt(Object key){
+		ensureEditable();
+		Object v = valAt(key, NOT_FOUND);
+		if(v != NOT_FOUND)
+			return MapEntry.create(key, v);
+		return null;
+	}
+
+	public int count() {
+		ensureEditable();
 		return count;
+	}
+	int doCount() {
+		return count();
 	}
 	
 	void ensureEditable(){
