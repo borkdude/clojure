@@ -205,10 +205,11 @@
  ^{:arglists '([obj])
    :doc "Returns the metadata of obj, returns nil if there is no metadata."
    :added "1.0"
-   :static true}
- meta (fn ^:static meta [x]
-        (if (instance? clojure.lang.IMeta x)
-          (. ^clojure.lang.IMeta x (meta)))))
+   :static true
+   :inline (fn [x] (list 'clojure.lang.RT/meta x))
+   }
+  meta (fn ^:static meta [x]
+         (clojure.lang.RT/meta x)))
 
 (def
  ^{:arglists '([^clojure.lang.IObj obj m])
@@ -930,11 +931,11 @@
 
 ;; reduce is defined again later after InternalReduce loads
 (defn ^:private ^:static
-  reduce1
+  reduce0
        ([f coll]
              (let [s (seq coll)]
                (if s
-         (reduce1 f (first s) (next s))
+         (reduce0 f (first s) (next s))
                  (f))))
        ([f val coll]
           (let [s (seq coll)]
@@ -945,6 +946,8 @@
                        (chunk-next s))
                 (recur f (f val (first s)) (next s)))
          val))))
+
+(def ^:private ^:redef reduce1 reduce0)
 
 (defn reverse
   "Returns a seq of the items in coll in reverse order. Not lazy."
@@ -3059,33 +3062,7 @@
      (clojure.lang.LongRange/create start end step)
      (clojure.lang.Range/create start end step))))
 
-(defn merge
-  "Returns a map that consists of the rest of the maps conj-ed onto
-  the first.  If a key occurs in more than one map, the mapping from
-  the latter (left-to-right) will be the mapping in the result."
-  {:added "1.0"
-   :static true}
-  [& maps]
-  (when (some identity maps)
-    (reduce1 #(conj (or %1 {}) %2) maps)))
 
-(defn merge-with
-  "Returns a map that consists of the rest of the maps conj-ed onto
-  the first.  If a key occurs in more than one map, the mapping(s)
-  from the latter (left-to-right) will be combined with the mapping in
-  the result by calling (f val-in-result val-in-latter)."
-  {:added "1.0"
-   :static true}
-  [f & maps]
-  (when (some identity maps)
-    (let [merge-entry (fn [m e]
-			(let [k (key e) v (val e)]
-			  (if (contains? m k)
-			    (assoc m k (f (get m k) v))
-			    (assoc m k v))))
-          merge2 (fn [m1 m2]
-		   (reduce1 merge-entry (or m1 {}) (seq m2)))]
-      (reduce1 merge2 maps))))
 
 (defn line-seq
   "Returns the lines of text from rdr as a lazy sequence of strings.
@@ -3434,16 +3411,63 @@
        (recur ret (first ks) (next ks))
        ret))))
 
+(defn merge-with
+  "Returns a map that consists of the rest of the maps conj-ed onto
+  the first.  If a key occurs in more than one map, the mapping(s)
+  from the latter (left-to-right) will be combined with the mapping in
+  the result by calling (f val-in-result val-in-latter)."
+  {:added "1.0"
+   :static true}
+  ([f] nil)
+  ([f x] x)
+  ([f x y]
+     (if (and x y)
+       (let [merge-kv
+             (fn this [m k v]
+               (let [mv (get m k this)]
+                 (if (identical? mv this)
+                   (assoc m k v)
+                   (assoc m k (f mv v)))))
+             merge-kv!
+             (fn this [m k v]
+               (let [mv (clojure.lang.ILookup/.valAt m k this)]
+                 (if (identical? mv this)
+                   (assoc! m k v)
+                   (assoc! m k (f mv v)))))]
+         (if (instance? clojure.lang.IKVReduce y)
+           (if (instance? clojure.lang.IEditableCollection x)
+             (persistent! (clojure.lang.IKVReduce/.kvreduce y merge-kv! (transient x)))
+             (clojure.lang.IKVReduce/.kvreduce y merge-kv x))
+           (reduce1 (fn [m e] (merge-kv m (key e) (val e))) x y)))
+       (or x y)))
+  ([f x y & maps]
+     (let [merge2 (fn [x y] (merge-with f x y))]
+       (reduce1 merge2 (merge2 x y) maps))))
+
 ;redef into with batch support
-(defn ^:private into1
+(defn ^:private into0
   "Returns a new coll consisting of to-coll with all of the items of
   from-coll conjoined."
   {:added "1.0"
    :static true}
   [to from]
   (if (instance? clojure.lang.IEditableCollection to)
-    (persistent! (reduce1 conj! (transient to) from))
-    (reduce1 conj to from)))
+    (persistent! (reduce0 conj! (transient to) from))
+    (reduce0 conj to from)))
+
+(def ^:private ^:redef into1 into0)
+
+(defn merge
+  "Returns a map that consists of the rest of the maps conj-ed onto
+  the first.  If a key occurs in more than one map, the mapping from
+  the latter (left-to-right) will be the mapping in the result."
+  {:added "1.0"
+   :static true}
+  ([] nil)
+  ([x] x)
+  ([x y] (if (and x y) (into1 x y) (or x y)))
+  ([x y & maps]
+   (reduce1 merge (merge x y) maps)))
 
 (defmacro import 
   "import-list => (package-symbol class-name-symbols*)
@@ -3678,7 +3702,7 @@
        (ratio? x) (/ (BigDecimal. (.numerator ^clojure.lang.Ratio x)) (.denominator ^clojure.lang.Ratio x))
        (instance? clojure.lang.BigInt x) (.toBigDecimal ^clojure.lang.BigInt x)
        (instance? BigInteger x) (BigDecimal. ^BigInteger x)
-       (number? x) (BigDecimal/valueOf (long x))
+       (number? x) (BigDecimal/valueOf (double x))
        :else (BigDecimal. x)))
 
 (def ^:dynamic ^{:private true} print-initialized false)
@@ -4134,7 +4158,7 @@
     (with-meta coll nil)
     (if (instance? clojure.lang.IReduceInit coll)
       (persistent! (.reduce ^clojure.lang.IReduceInit coll conj! (transient #{})))
-      (persistent! (reduce1 conj! (transient #{}) coll)))))
+      (persistent! (reduce0 conj! (transient #{}) coll)))))
 
 (defn ^{:private true
    :static true}
@@ -4434,6 +4458,22 @@
   ([f] (lazy-seq (cons (f) (repeatedly f))))
   ([n f] (take n (repeatedly f))))
 
+(defn counted?
+ "Returns true if coll implements count in constant time"
+ {:added "1.0"
+   :static true}
+ [coll] (instance? clojure.lang.Counted coll))
+
+(defn empty?
+  "Returns true if coll has no items. To check the emptiness of a seq,
+  please use the idiom (seq x) rather than (not (empty? x))"
+  {:added "1.0"
+   :static true}
+  [coll]
+  (if (counted? coll)
+    (zero? (count coll))
+    (not (seq coll))))
+
 (declare reduce-kv)
 
 (defn some-vals
@@ -4442,9 +4482,10 @@
   {:added "1.13"
    :static true}
   [m]
-  (reduce-kv
-   (fn [m k v] (if (some? v) (assoc m k v) m))
-   nil m))
+  (when m
+    (reduce-kv
+     (fn [m k v] (if (some? v) (assoc m k v) m))
+     nil m)))
 
 (defn seq-to-map-for-destructuring
   "Builds a map from a seq as described in
@@ -4497,27 +4538,37 @@
   [pb bvec b v]
   (let [gmap (gensym "map__")
         gmapseq (with-meta gmap {:tag 'clojure.lang.ISeq})
-        gignore (gensym "ignore__")
+        gtemp (gensym "temp__")
         defaults (:or b)
-        defaults-as (:defaults b)
-        _ (when (and defaults-as (not defaults))
-            (throw (new IllegalArgumentException "Can't specify :defaults without :or")))
         b (dissoc b :defaults)
         gdefaults (when defaults (zipmap (keys defaults) (repeatedly #(gensym "default__"))))
         select (:select b)
+        all (:all b)
+        excess (:excess b)
+        missing (:missing b)
+        gnotfound (when missing (gensym "notfound__"))
+        gnotfound? (when missing (gensym "notfound?__"))
         xf (fn [mk]
              (let [mkns (namespace mk)
                    mkn (name mk)]
-               (cond (.startsWith mkn "keys") #(keyword (or mkns (namespace %)) (name %))
-                     (.startsWith mkn "syms") #(list `quote (symbol (or mkns (namespace %)) (name %)))
+               (cond (.startsWith mkn "keys") #(keyword (or (namespace %) mkns) (name %))
+                     (.startsWith mkn "syms") #(list `quote (symbol (or (namespace %) mkns) (name %)))
                      (.startsWith mkn "strs") str
                      :else (throw (new Exception (str "Unsupported map directive: " mk) )))))
+        xfk (fn [mk]
+              (let [mkns (namespace mk)
+                    mkn (name mk)]
+                (if (and (.startsWith mkn "keys") mkns)
+                  #(if (keyword? %)
+                     (keyword (or (namespace %) mkns) (name %))
+                     %)
+                  identity)))
         ret (reduce1 (fn [ret e]
                        (conj ret (val e) (defaults (key e))))
                      bvec gdefaults)
         ret (-> ret (conj gmap) (conj v)
                 (conj gmap)
-                (conj `(if (seq? ~gmap)
+                (conj `(if (instance? clojure.lang.ISeq ~gmap)
                          (if (next ~gmapseq)
                            (clojure.lang.PersistentArrayMap/createAsIfByAssoc (to-array ~gmapseq))
                            (if (seq ~gmapseq)
@@ -4528,7 +4579,12 @@
                    (if (:as b)
                      (conj ret (:as b) gmap)
                      ret))))
-        bes (dissoc b :as :or :select)
+        ret (if missing
+              (conj ret
+                    missing nil
+                    gnotfound (list 'new 'Object))
+              ret)
+        bes (dissoc b :as :or :select :all :excess :missing)
         localize (fn [bb] (if (instance? clojure.lang.Named bb)
                             (with-meta (symbol nil (name bb)) (meta bb)) bb))
         push1 (fn [ret bb bk req?]
@@ -4544,59 +4600,118 @@
                                (throw (new Exception
                                            (str "Can't supply default value for required key: " bk)))
                                (list `get gmap bk (if local-default? (gdefaults local) (gdefaults bk)))))
-                           (list getter gmap bk))]
-                  (if (ident? bb)
-                    (-> ret (conj local bv))
-                    (pb ret bb bv))))
+                           (if req?
+                             (if missing
+                               (list `get gmap bk gnotfound)
+                               (list `req! gmap bk))
+                             (list `get gmap bk)))]
+                  (if (and req? missing)
+                    (let [ret
+                          (conj ret
+                                gtemp bv
+                                gnotfound? `(identical? ~gtemp ~gnotfound)
+                                missing `(if ~gnotfound? (assoc ~missing ~bk nil) ~missing)
+                                (if (ident? bb) local gtemp) `(when-not ~gnotfound? ~gtemp))]
+                      (if (ident? bb) ret (pb ret bb gtemp)))                    
+                    (if (ident? bb)
+                      (-> ret (conj local bv))
+                      (pb ret bb bv)))))
         retsel
-        (loop [ret ret, sel #{}, bes bes, b->k {}, subs nil]
+        (loop [ret ret, sel #{}, bes (seq bes), b->k {}, subs nil, suba nil, subexcess nil, submissing nil]
           (if (seq bes)
             (let [be (first bes), bb (key be), bk (val be)]
               (if (keyword? bb)
-                (let [dir bb
-                      tr (xf bb)
-                      req? (.endsWith (name bb) "!")
-                      retsel
-                      (loop [ret ret, sel sel, bbs (seq bk), preamp? true, b->k b->k]
-                        (if (seq bbs)
-                          (let [bb (first bbs)]
-                            (if (= bb '&)
-                              (if preamp?
-                                (recur ret sel (next bbs) false b->k)
-                                (throw (new IllegalArgumentException (str "& can only appear once in " dir))))
-                              (let [_
-                                    (when (and (not preamp?) (symbol? bb))
-                                      (throw
-                                       (new IllegalArgumentException
-                                            (str "'" bb
-                                                 "' - binding symbols can only appear before '&', use keys after"))))
-                                    bk (if preamp? (tr bb) bb)]
-                                (recur (if (or preamp? req?)
-                                         (push1 ret (if preamp? bb gignore) bk req?)
-                                         ret)
-                                       (conj sel bk)
-                                       (next bbs) preamp?
-                                       (if preamp? (assoc b->k (localize bb) bk) b->k)))))
-                          {:ret ret, :sel sel, :b->k b->k}))]
-                  (recur (:ret retsel) (:sel retsel) (next bes) (:b->k retsel) subs))
-                (let [subsel? (and select (map? bb))
+                (if (= :req! bb)
+                  (let [bes (reduce1 conj (next bes)
+                                     (map #(clojure.lang.MapEntry/create
+                                            (vary-meta (key %) assoc ::impl-detail-42 true) (val %))
+                                          bk))]
+                    (recur ret sel bes b->k subs suba subexcess submissing))
+                  ;;presume binding list directive
+                  (let [dir bb
+                        tr (xf bb)
+                        trk (xfk bb)
+                        req? (.endsWith (name bb) "!")
+                        retsel
+                        (loop [ret ret, sel sel, bbs (seq bk), preamp? true, b->k b->k]
+                          (if (seq bbs)
+                            (let [bb (first bbs)]
+                              (if (= bb '&)
+                                (if preamp?
+                                  (recur ret sel (next bbs) false b->k)
+                                  (throw (new IllegalArgumentException (str "& can only appear once in " dir))))
+                                (let [_
+                                      (when (and (not preamp?) (symbol? bb))
+                                        (throw
+                                         (new IllegalArgumentException
+                                              (str "'" bb
+                                                   "' - binding symbols can only appear before '&', use keys after"))))
+                                      bk (if preamp? (tr bb) (trk bb))]
+                                  (recur (if (or preamp? req?)
+                                           (push1 ret (if preamp? bb gtemp) bk req?)
+                                           ret)
+                                         (conj sel bk)
+                                         (next bbs) preamp?
+                                         (if preamp? (assoc b->k (localize bb) bk) b->k)))))
+                            {:ret ret, :sel sel, :b->k b->k}))]
+                    (recur (:ret retsel) (:sel retsel) (next bes) (:b->k retsel) subs suba subexcess submissing)))
+                (let [req? (-> bb meta ::impl-detail-42)
+                      subsel? (and select (map? bb))
                       bb (if (or (not subsel?) (:select bb))
                            bb
                            (assoc bb :select (gensym "select__")))
                       subs (if subsel? (assoc subs bk (:select bb)) subs)
+
+                      suball? (and all (map? bb))
+                      bb (if (or (not suball?) (:all bb))
+                           bb
+                           (assoc bb :all (gensym "all__")))
+                      suba (if suball? (assoc suba bk (:all bb)) suba)
+
+                      subexcess? (and excess (map? bb))
+                      bb (if (or (not subexcess?) (:excess bb))
+                           bb
+                           (assoc bb :excess (gensym "excess__")))
+                      subexcess (if subexcess? (assoc subexcess bk (:excess bb)) subexcess)
+
+                      submissing? (and missing (map? bb))
+                      bb (if (or (not submissing?) (:missing bb))
+                           bb
+                           (assoc bb :missing (gensym "missing__")))
+                      submissing (if submissing? (assoc submissing bk (:missing bb)) submissing)
+
                       b->k (if (symbol? bb) (assoc b->k bb bk) b->k)]
-                  (recur (push1 ret bb bk false) (conj sel bk) (next bes) b->k subs))))
-            {:ret ret, :sel sel, :b->k b->k :subs subs}))
-        ret (:ret retsel), sel (:sel retsel), b->k (:b->k retsel)
-        bk #(if (symbol? %) (b->k %) %)
-        dm (when defaults (dissoc (zipmap (map bk (keys gdefaults)) (vals gdefaults)) nil))
+                  (recur (push1 ret bb bk req?) (conj sel bk) (next bes) b->k subs suba subexcess submissing))))
+            {:ret ret, :sel sel, :b->k b->k :subs subs :suba suba :subexcess subexcess :submissing submissing}))
+        ret (:ret retsel), sel (vec (:sel retsel)), b->k (:b->k retsel)
+        new-or-code (and defaults (or select all))
+        bk #(if (symbol? %)
+              (let [bk (b->k %)]
+                (when (and new-or-code (not bk))
+                  (throw (new IllegalArgumentException (str "symbol " % " in :or does not refer to a binding"))))
+                bk)
+              %)
+        dm (when defaults (zipmap (map bk (keys gdefaults)) (vals gdefaults)))
+        _ (and new-or-code (not= (count (select-keys dm sel)) (count defaults))
+               (throw (new IllegalArgumentException (str "keys "
+                                                         (apply disj (set (keys dm)) sel)
+                                                         " appear only in :or"))))
+        dm (if (empty? dm) nil dm)
         ret (if select
-              (conj ret select `(when-let [mm# (merge (some-vals (select-keys ~dm ~sel))
-                                                      ~gmap
-                                                      (some-vals ~(:subs retsel)))]
+              (conj ret select `(when-let [mm# (merge ~dm ~gmap (some-vals ~(:subs retsel)))]
                                   (select-keys mm# ~sel)))
               ret)
-        ret (if defaults-as (conj ret defaults-as dm) ret)]
+        ret (if all
+              (conj ret all `(merge ~dm ~gmap (some-vals ~(:suba retsel))))
+              ret)
+
+        ret (if excess
+              (conj ret excess `(merge (not-empty (apply dissoc ~gmap ~sel)) (some-vals ~(:subexcess retsel))))
+              ret)
+
+        ret (if missing
+              (conj ret missing `(merge ~missing (some-vals ~(:submissing retsel))))
+              ret)]
     ret))
 
 (defn destructure [bindings]
@@ -5694,7 +5809,7 @@
   (loop [ret (set (bases class)) cs ret]
     (if (seq cs)
       (let [c (first cs) bs (bases c)]
-        (recur (into1 ret bs) (into1 (disj cs c) bs)))
+        (recur (into0 ret bs) (into0 (disj cs c) bs)))
       (not-empty ret))))
 
 (defn isa?
@@ -6290,7 +6405,11 @@ fails, attempts to require sym's namespace and retries."
   where ks is a sequence of keys. Returns nil if the key
   is not present, or the not-found value if supplied."
   {:added "1.2"
-   :static true}
+   :static true
+   :inline (fn [coll path]
+             (when (vector? path)
+               `(clojure.core/-> ~coll ~@(map #(list 'clojure.core/get %) path))))
+   :inline-arities #{2}}
   ([m ks]
      (reduce1 get m ks))
   ([m ks not-found]
@@ -6397,22 +6516,6 @@ fails, attempts to require sym's namespace and retries."
  {:added "1.0"
    :static true}
   [coll] (instance? clojure.lang.Sorted coll))
-
-(defn counted?
- "Returns true if coll implements count in constant time"
- {:added "1.0"
-   :static true}
-  [coll] (instance? clojure.lang.Counted coll))
-
-(defn empty?
-  "Returns true if coll has no items. To check the emptiness of a seq,
-  please use the idiom (seq x) rather than (not (empty? x))"
-  {:added "1.0"
-   :static true}
-  [coll]
-  (if (counted? coll)
-    (zero? (count coll))
-    (not (seq coll))))
 
 (defn reversible?
  "Returns true if coll implements Reversible"
@@ -6959,11 +7062,11 @@ fails, attempts to require sym's namespace and retries."
   {:added "1.12"}
   ([to ^java.util.stream.BaseStream stream]
    (if (instance? clojure.lang.IEditableCollection to)
-     (with-meta (persistent! (stream-reduce! conj! (transient to) stream)) (meta to))
+     (persistent! (stream-reduce! conj! (transient to) stream))
      (stream-reduce! conj to stream)))
   ([to xform ^java.util.stream.BaseStream stream]
    (if (instance? clojure.lang.IEditableCollection to)
-     (with-meta (persistent! (stream-transduce! xform conj! (transient to) stream)) (meta to))
+     (persistent! (stream-transduce! xform conj! (transient to) stream))
      (stream-transduce! xform conj to stream))))
 
 (defmacro ^:private when-class [class-name & body]
@@ -7033,6 +7136,8 @@ fails, attempts to require sym's namespace and retries."
        (.reduce ^clojure.lang.IReduceInit coll f val)
        (clojure.core.protocols/coll-reduce coll f val))))
 
+(alter-var-root #'reduce1 (fn [_] reduce))
+
 (extend-protocol clojure.core.protocols/IKVReduce
  nil
  (kv-reduce
@@ -7064,7 +7169,9 @@ fails, attempts to require sym's namespace and retries."
   where the keys will be the ordinals."  
   {:added "1.4"}
   ([f init coll]
-     (clojure.core.protocols/kv-reduce coll f init)))
+   (if (instance? clojure.lang.IKVReduce coll)
+     (clojure.lang.IKVReduce/.kvreduce coll f init)
+     (clojure.core.protocols/kv-reduce coll f init))))
 
 (defn completing
   "Takes a reducing function f of 2 args and returns a fn suitable for
@@ -7104,17 +7211,24 @@ fails, attempts to require sym's namespace and retries."
   ([] [])
   ([to] to)
   ([to from]
+   (if (and (instance? clojure.lang.IKVReduce from)
+            (instance? clojure.lang.IPersistentMap from)
+            (instance? clojure.lang.IPersistentMap to))
      (if (instance? clojure.lang.IEditableCollection to)
-       (with-meta (persistent! (reduce conj! (transient to) from)) (meta to))
-       (reduce conj to from)))
+       (persistent! (clojure.lang.IKVReduce/.kvreduce from assoc! (transient to)))
+       (clojure.lang.IKVReduce/.kvreduce from assoc to))
+     (if (instance? clojure.lang.IEditableCollection to)
+       (persistent! (reduce conj! (transient to) from))
+       (reduce conj to from))))
   ([to xform from]
-     (if (instance? clojure.lang.IEditableCollection to)
-       (let [tm (meta to)
-             rf (fn
-                  ([coll] (-> (persistent! coll) (with-meta tm)))
-                  ([coll v] (conj! coll v)))]
-         (transduce xform rf (transient to) from))
-       (transduce xform conj to from))))
+   (if (instance? clojure.lang.IEditableCollection to)
+     (let [rf (fn
+                ([coll] (persistent! coll))
+                ([coll v] (conj! coll v)))]
+       (transduce xform rf (transient to) from))
+     (transduce xform conj to from))))
+
+(alter-var-root #'into1 (fn [_] into))
 
 (defn mapv
   "Returns a vector consisting of the result of applying f to the
@@ -7146,17 +7260,48 @@ fails, attempts to require sym's namespace and retries."
       persistent!))
 
 (defn select-keys
-  "Returns a map containing only those entries in map whose key is in keyseq"
-  {:added "1.0"}
+  {:arglists '([map keyseq])
+   :doc "Returns a map containing only those entries in map whose key is in keyseq"
+   :added "1.0"}
   [map keyseq]
-  (with-meta
-    (persistent!
-      (reduce (fn [ret k]
-                (if-let [entry (clojure.lang.RT/find map k)]
-                  (conj! ret entry)
-                  ret))
-        (transient {}) keyseq))
-    (meta map)))
+  (let [ret (persistent!
+             (reduce (fn this [ret k]
+                       (let [v (get map k this)]
+                         (if (identical? v this)
+                           ret
+                           (assoc! ret k v))))
+                     (transient {}) keyseq))]
+    (if-let [md (meta map)]
+      (with-meta ret md)
+      ret)))
+
+(defn merge-deep
+  "Returns a map that consists of the rest of the maps conj-ed onto
+  the first. For each pairwise merge, when a key occurs in both maps,
+  if both values are maps, then recursively merge-deep, else use the
+  latter (left-to-right) value."
+  {:added "1.13"}
+  [& maps]
+  (apply merge-with
+    (fn [x y]
+      (if (and (map? x) (map? y))
+        (merge-deep x y)
+        y))
+    maps))
+
+(defn merge-deep-with
+  "Returns a map that consists of the rest of the maps conj-ed onto
+  the first. For each pairwise merge, when a key occurs in both maps,
+  if both values are maps, then recursively merge-deep-with, else use
+  the result of (f val-in-prior val-in-latter)."
+  {:added "1.13"}
+  [f & maps]
+  (apply merge-with
+    (fn [x y]
+      (if (and (map? x) (map? y))
+        (merge-deep-with f x y)
+        (f x y)))
+    maps))
 
 (require '[clojure.java.io :as jio])
 
@@ -8211,6 +8356,12 @@ fails, attempts to require sym's namespace and retries."
   (force tap-loop)
   (.offer tapq (if (nil? x) ::tap-nil x)))
 
+(defn tap->
+  "Sends x to any taps, drops if tap queue is full, returns x."
+  {:added "1.13"}
+  [x]
+  (doto x tap>))
+
 (defn update-vals
   "m f => {k (f v) ...}
 
@@ -8218,14 +8369,13 @@ fails, attempts to require sym's namespace and retries."
   are mapped to result of applying f to the corresponding values of m."
   {:added "1.11"}
   [m f]
-  (with-meta
-    (persistent!
-     (reduce-kv (fn [acc k v] (assoc! acc k (f v)))
-                (if (instance? clojure.lang.IEditableCollection m)
-                  (transient m)
-                  (transient {}))
-                m))
-    (meta m)))
+  (persistent!
+   (reduce-kv
+    (fn [acc k v] (assoc! acc k (f v)))
+    (transient
+     (if (instance? clojure.lang.IEditableCollection m) m
+         (with-meta {} (meta m))))
+    m)))
 
 (defn update-keys
   "m f => {(f k) v ...}
@@ -8309,3 +8459,40 @@ fails, attempts to require sym's namespace and retries."
    :added "1.11"}
   [^double num]
   (Double/isInfinite num))
+
+(defn- selector-impl [m]
+  (let [dirs [:select :excess :missing :all]
+        names (zipmap (filter m dirs) (repeatedly gensym))]
+    (if (empty? names)
+      (throw (IllegalArgumentException.
+              "form must contain at least one of :select :excess :missing :all"))
+      `(fn ~(gensym "selector")
+         [map#]
+         (let [~(merge m names) map#]
+           ~(if (= 1 (count names))
+              (-> names first val)
+              (list `some-vals names)))))))
+
+(defmacro selector
+  "Builds a selecting-fn from m, a map destructuring form that must
+  include one or more of the :select, :all, :missing, and :excess
+  directives. The return function takes a collection, destructures it
+  per m, and returns a map of the result(s).
+
+  If m has exactly one directive, the result is the value that
+  directive would yield. If m has more than one directive, then it
+  returns a map of directives to values.
+
+  As in destructuring, :missing controls whether missing required keys
+  throw or are collected.
+
+  While a map destructuring form may and sometimes must include
+  bindings, selector doesn't produce bindings, thus ignoring the
+  associated directive names.
+
+  Throws an exception if the argument is not a map."
+  {:added "1.13"}
+  [m]
+  (when (not (map? m))
+    (throw (IllegalArgumentException. "expected a map")))
+  (selector-impl m))

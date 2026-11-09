@@ -142,7 +142,8 @@ Symbol.intern("UnsupportedClassVersionError"), UnsupportedClassVersionError.clas
 Symbol.intern("UnsupportedOperationException"), UnsupportedOperationException.class,
 Symbol.intern("VerifyError"), VerifyError.class,
 Symbol.intern("VirtualMachineError"), VirtualMachineError.class,
-Symbol.intern("Void"), Void.class
+Symbol.intern("Void"), Void.class,
+Symbol.intern("ExceptionInfo"), clojure.lang.ExceptionInfo.class
 );
 
 // single instance of UTF-8 Charset, so as to avoid catching UnsupportedCharsetExceptions everywhere
@@ -439,7 +440,7 @@ static public void load(String scriptbase, boolean failIfNotFound) throws IOExce
 
 	if((classURL != null &&
 	    (cljURL == null
-	     || lastModified(classURL, classfile) > lastModified(cljURL, scriptfile)))
+	     || lastModified(classURL, classfile) >= lastModified(cljURL, scriptfile)))
 	   || classURL == null) {
 		try {
 			Var.pushThreadBindings(

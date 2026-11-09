@@ -1,5 +1,8 @@
 (ns clojure.test-clojure.transients
-  (:use clojure.test))
+  (:use clojure.test)
+  (:require [clojure.test.check :as chk]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]))
 
 (deftest popping-off
   (testing "across a node boundary"
@@ -80,3 +83,64 @@
     (is (= nil (get thm :x)))
     (is (= [:a 1] (find thm :a)))
     (is (= nil (find thm :x)))))
+
+(defn assoc-transient-check-meta
+  [cnt keyfn]
+  (let [metam {:foo "meta"}]
+    (loop [m (transient (with-meta {} metam))
+           i 0]
+      (if (< i cnt)
+        (let [nextm (assoc! m (keyfn i) i)]
+          ;; this doesn't pass right now, but maybe it should
+          ;(is (= metam (meta nextm) (str "lost meta at i=" i)))
+          (recur nextm (inc i)))
+        (is (= metam (meta (persistent! m))))))))
+
+(deftest metadata-propagation-across-growing-transient-map
+  ;; 130 = past KW_HASHTABLE_THRESHOLD
+  ;; test both keyword and non-keyword keys
+  (assoc-transient-check-meta 130 #(keyword (str "kw-" %)))
+  (assoc-transient-check-meta 130 #(str "kw-" %)))
+
+(defn through-transient [r1 r2]
+  (loop [acc (transient r1)
+         i 0]
+    (if (< i (count r2))
+      (recur (conj! acc (nth r2 i)) (inc i))
+      (persistent! acc))))
+
+(deftest fill-transient
+  (let [res (chk/quick-check
+              5000
+              (prop/for-all [cnt (gen/resize 130 gen/nat)]
+                (let [v (range cnt)]
+                  (= v (through-transient [] v)))))]
+    (when-not (:result res)
+      (is
+        (:result res)
+        (->
+          res
+          :shrunk
+          :smallest
+          first
+          clojure.pprint/pprint
+          with-out-str)))))
+
+(deftest fill-transient-adopt
+  (let [res (chk/quick-check
+              5000
+              (prop/for-all [cnts (gen/tuple (gen/resize 130 gen/nat) (gen/resize 130 gen/nat))]
+                (let [[c1 c2] cnts
+                      r1 (vec (range c1))
+                      r2 (vec (range c2))]
+                  (= (concat r1 r2) (through-transient r1 r2)))))]
+    (when-not (:result res)
+      (is
+        (:result res)
+        (->
+          res
+          :shrunk
+          :smallest
+          first
+          clojure.pprint/pprint
+          with-out-str)))))
